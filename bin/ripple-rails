@@ -49,9 +49,16 @@ while($running) do
 
 		ws.onmessage = lambda do |event|
 			message = JSON.parse(event.data) rescue {}
-			if message['type'] == 'transaction' && message['validated'] == true && message['transaction']['TransactionType'] == 'Payment'
+			if message['type'] == 'transaction' && message['validated'] == true && message['transaction']['TransactionType'] == 'Payment' && 
 				begin
-					run_action(controller, :notify, {:transaction => Rippler::Transaction.new(message)})
+					run_action(controller, :notify, {:transaction => message})
+					amount = message['transaction']["Amount"]
+					currency = amount["currency"] || "XRP"
+					price = amount["value"]
+					destination = message['transaction']['Destination'] 
+					source = message['transaction']["Account"]
+					logger.warn "source: #{source} destination: #{destination} currency: #{currency} price: #{price} "
+					logger.warn message['transaction']
 				rescue Exception
 					logger.warn $!.inspect
 				end
