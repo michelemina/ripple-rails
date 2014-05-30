@@ -20,44 +20,52 @@ controller = Module::const_get(controller)
 
 err "Ripple action #{controller}##{action} not found." unless controller.new.respond_to?(action)
 
-EM.run {
-	ws = Faye::WebSocket::Client.new(config[:websocket] || Rippler::RIPPLE_URI)
+$running = true
 
-	ws.onopen = lambda do |event|
-		cmd = {'command' => 'subscribe', 'streams' => ['transactions']}
-		if config[:address]
-			adr = config[:address].is_a?(Array) ? config[:address] : [config[:address].to_s]
-			cmd.merge!('accounts' => adr)
-			warn "Monitoring for transactions to #{adr.inspect}..."
-		else
-			warn 'Monitoring for transactions...'
+Signal.trap("TERM") do
+  EM.stop
+  $running = false
+end
+
+while($running) do
+
+	EM.run {
+		ws = Faye::WebSocket::Client.new(config[:websocket] || Rippler::RIPPLE_URI)
+
+		ws.onopen = lambda do |event|
+			cmd = {'command' => 'subscribe', 'streams' => ['transactions']}
+			if config[:address]
+				adr = config[:address].is_a?(Array) ? config[:address] : [config[:address].to_s]
+				cmd.merge!('accounts' => adr)
+				warn "Monitoring for transactions to #{adr.inspect}..."
+			else
+				warn 'Monitoring for transactions...'
+			end
+
+			ws.send(cmd.to_json)
 		end
 
-		ws.send(cmd.to_json)
-	end
-
-	ws.onmessage = lambda do |event|
-		message = JSON.parse(event.data) rescue {}
-		if message['type'] == 'transaction' && message['validated'] == true && message['transaction']['TransactionType'] == 'Payment'
-			begin
-				run_action(controller, :notify, {:transaction => Rippler::Transaction.new(message)})
-			rescue Exception
-				warn $!.inspect
-				exit 2
+		ws.onmessage = lambda do |event|
+			message = JSON.parse(event.data) rescue {}
+			if message['type'] == 'transaction' && message['validated'] == true && message['transaction']['TransactionType'] == 'Payment'
+				begin
+					run_action(controller, :notify, {:transaction => Rippler::Transaction.new(message)})
+				rescue Exception
+					warn $!.inspect
+				end
 			end
 		end
-	end
 
-	ws.onerror = lambda do |event|
-		warn event["error"].inspect
-		EM.stop
-		exit 1
-	end
+		ws.onerror = lambda do |event|
+			warn event["error"].inspect
+			EM.stop
+		end
 
-	ws.onclose = lambda do |event|
-		ws = nil
-		warn 'Websocket connection closed'
-		EM.stop
-		exit 1
-	end
-}
+		ws.onclose = lambda do |event|
+			ws = nil
+			warn 'Websocket connection closed'
+			EM.stop
+		end
+	}
+
+end
