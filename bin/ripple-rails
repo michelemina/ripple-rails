@@ -12,7 +12,9 @@ require 'json'
 load_environment
 config = load_config
 controller, action = config && config[:action] ? config[:action].split(/#/, 2) : []
+log_path = config[:log] ? config[:log] : STDOUT
 
+logger = Logger.new(log_path)
 err 'Ripple action not properly configured.' unless controller && action
 err "No class #{controller} found for Ripple action." unless Module::const_defined?(controller)
 
@@ -37,9 +39,9 @@ while($running) do
 			if config[:address]
 				adr = config[:address].is_a?(Array) ? config[:address] : [config[:address].to_s]
 				cmd.merge!('accounts' => adr)
-				warn "Monitoring for transactions to #{adr.inspect}..."
+				logger.warn "Monitoring for transactions to #{adr.inspect}..."
 			else
-				warn 'Monitoring for transactions...'
+				logger.warn 'Monitoring for transactions...'
 			end
 
 			ws.send(cmd.to_json)
@@ -51,19 +53,19 @@ while($running) do
 				begin
 					run_action(controller, :notify, {:transaction => Rippler::Transaction.new(message)})
 				rescue Exception
-					warn $!.inspect
+					logger.warn $!.inspect
 				end
 			end
 		end
 
 		ws.onerror = lambda do |event|
-			warn event["error"].inspect
+			logger.warn event["error"].inspect
 			EM.stop
 		end
 
 		ws.onclose = lambda do |event|
 			ws = nil
-			warn 'Websocket connection closed'
+			logger.warn 'Websocket connection closed'
 			EM.stop
 		end
 	}
