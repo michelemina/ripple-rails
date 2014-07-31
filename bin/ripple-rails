@@ -49,7 +49,7 @@ while($running) do
 
 		ws.onmessage = lambda do |event|
 			message = JSON.parse(event.data) rescue {}
-			if message['type'] == 'transaction' && message['validated'] == true && message['transaction']['TransactionType'] == 'Payment' && 
+			if message['type'] == 'transaction' && message['validated'] == true && message['transaction']['TransactionType'] == 'Payment' 
 				begin
 					run_action(controller, :notify, {:transaction => message})
 					amount = message['transaction']["Amount"]
